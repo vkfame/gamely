@@ -1,5 +1,7 @@
 import asyncio 
 import os
+import logging
+from pathlib import Path
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 from handlers import get_all_rts
@@ -7,9 +9,10 @@ from handlers import get_all_rts
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 tk = os.getenv("TOKEN")
 if not tk:
@@ -17,48 +20,74 @@ if not tk:
 
 bot = Bot(token=tk)
 dp = Dispatcher()
+
 app = FastAPI()
 
-current_dir = os.path.dirname(os.path.realpath(__file__))
+BASE_DIR = Path(__file__).resolve().parent
+CWD = Path.cwd()
 
-styles_path = os.path.join(current_dir, "styles")
-scripts_path = os.path.join(current_dir, "scripts")
+@app.on_event("startup")
+async def startup_debug():
+    logger.info(f"BASE_DIR (через __file__): {BASE_DIR}")
+    logger.info(f"CWD: {CWD}")
+    logger.info(f"Содержимое BASE_DIR: {list(BASE_DIR.iterdir())}")
 
-if os.path.exists(styles_path):
-    app.mount("/styles", StaticFiles(directory=styles_path), name="styles")
-if os.path.exists(scripts_path):
-    app.mount("/scripts", StaticFiles(directory=scripts_path), name="scripts")
+for base in [BASE_DIR, CWD]:
+    for folder in ["styles", "scripts"]:
+        p = base / folder
+        if p.exists() and not app.routes:
+            app.mount(f"/{folder}", StaticFiles(directory=str(p)), name=folder)
+            break
+
+for folder in ["styles", "scripts"]:
+    p = BASE_DIR / folder
+    if p.exists():
+        try:
+            app.mount(f"/{folder}", StaticFiles(directory=str(p)), name=folder)
+        except Exception as e:
+            logger.warning(f"Не удалось смонтировать {folder}: {e}")
 
 @app.get("/")
+@app.get("/index.html")
 async def read_index():
-    index_path = os.path.join(current_dir, "pages", "index.html")
-    
-    if not os.path.exists(index_path):
-        print(f"Error: File not found at path {index_path}")
-        return {"error": "Index.html not found on server"}, 404
-        
-    return FileResponse(index_path)
+    candidates = [
+        BASE_DIR / "pages" / "index.html",
+        BASE_DIR / "index.html",
+        CWD / "pages" / "index.html",
+        CWD / "index.html",
+        Path("/app/pages/index.html"),
+        Path("/app/index.html"),
+    ]
+    for path in candidates:
+        logger.info(f"Проверяю: {path} — {'EXISTS' if path.exists() else 'not found'}")
+        if path.exists():
+            return FileResponse(str(path))
+
+    return {"error": "index.html not found", "base_dir": str(BASE_DIR), "cwd": str(CWD)}
+
+@app.get("/debug")
+async def debug():
+    import subprocess
+    result = subprocess.run(["find", "/app", "-type", "f"], capture_output=True, text=True)
+    return {
+        "files": result.stdout.splitlines(),
+        "base_dir": str(BASE_DIR),
+        "cwd": str(CWD),
+    }
 
 async def on_startup(bot: Bot):
     gm = await bot.get_me()
-    print(f"Bot @{gm.username} (ID: {gm.id}) sucessfully started!")
+    print(f"Робот GMLY (@{gm.username}) успешно запущен!")
 
-async def start_all():
+async def main():
     dp.startup.register(on_startup)
     dp.include_router(get_all_rts())
-
-    config = uvicorn.Config(app, host="0.0.0.0", port=3000, log_level="info")
-    server = uvicorn.Server(config)
-
-    await asyncio.gather(
-        dp.start_polling(bot),
-        server.serve()
-    )
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
-        asyncio.run(start_all())
+        asyncio.run(main())
     except KeyboardInterrupt:
-        print("Приложение остановлено пользователем")
+        print("Бот остановлен.")
     except Exception as e:
         print(f"Критическая ошибка: {e}")
