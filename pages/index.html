@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GMLY - Board Games</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="../styles/style.css">
+</head>
+<body>
+
+    <header>
+        <div class="logo">GMLY</div>
+        <div class="subtitle">board games hub</div>
+    </header>
+
+    <div class="games-grid">
+        <div class="game-card" onclick="startGame('Шахматы')">
+            <div class="game-icon">♞</div>
+            <div class="game-title">Шахматы</div>
+        </div>
+        <div class="game-card" onclick="startGame('Карты')">
+            <div class="game-icon">♣</div>
+            <div class="game-title">Карты</div>
+        </div>
+        <div class="game-card" onclick="startGame('Мафия')">
+            <div class="game-icon">👁</div>
+            <div class="game-title">Мафия</div>
+        </div>
+        <div class="game-card" onclick="startGame('Морской Бой')">
+            <div class="game-icon">⚓</div>
+            <div class="game-title">Морской Бой</div>
+        </div>
+    </div>
+
+    <div class="user-info" id="user-display">
+        Загрузка игрока...
+    </div>
+
+    <script src="../scripts/main.js"></script>
+</body>
+</html>

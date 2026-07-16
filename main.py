@@ -3,6 +3,8 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from handlers import get_all_rts
+from fastapi import FastAPI
+import uvicorn
 
 load_dotenv()
 
@@ -12,6 +14,7 @@ if not tk:
 
 bot = Bot(token=tk)
 dp = Dispatcher()
+app = FastAPI()
 
 async def on_startup():
     gm = await bot.get_me()
@@ -24,6 +27,7 @@ async def main():
     await dp.start_polling()
 
 if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
