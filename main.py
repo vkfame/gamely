@@ -19,18 +19,29 @@ bot = Bot(token=tk)
 dp = Dispatcher()
 app = FastAPI()
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-app.mount("/styles", StaticFiles(directory=os.path.join(current_dir, "styles")), name="styles")
-app.mount("/scripts", StaticFiles(directory=os.path.join(current_dir, "scripts")), name="scripts")
+current_dir = os.path.dirname(os.path.realpath(__file__))
+
+styles_path = os.path.join(current_dir, "styles")
+scripts_path = os.path.join(current_dir, "scripts")
+
+if os.path.exists(styles_path):
+    app.mount("/styles", StaticFiles(directory=styles_path), name="styles")
+if os.path.exists(scripts_path):
+    app.mount("/scripts", StaticFiles(directory=scripts_path), name="scripts")
 
 @app.get("/")
 async def read_index():
     index_path = os.path.join(current_dir, "pages", "index.html")
+    
+    if not os.path.exists(index_path):
+        print(f"Error: File not found at path {index_path}")
+        return {"error": "Index.html not found on server"}, 404
+        
     return FileResponse(index_path)
 
 async def on_startup(bot: Bot):
     gm = await bot.get_me()
-    print(f"Bot @{gm.username} (ID: {gm.id}) успешно запущен!")
+    print(f"Bot @{gm.username} (ID: {gm.id}) sucessfully started!")
 
 async def start_all():
     dp.startup.register(on_startup)
