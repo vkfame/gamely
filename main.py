@@ -1,7 +1,9 @@
-import asyncio 
+import asyncio
 import os
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
+
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 from handlers import get_all_rts
@@ -12,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 tk = os.getenv("TOKEN")
@@ -21,63 +24,58 @@ if not tk:
 bot = Bot(token=tk)
 dp = Dispatcher()
 
-app = FastAPI()
-
 BASE_DIR = Path(__file__).resolve().parent
-CWD = Path.cwd()
+APP_DIR = BASE_DIR / "app"
 
-@app.on_event("startup")
-async def startup_debug():
-    logger.info(f"BASE_DIR (через __file__): {BASE_DIR}")
-    logger.info(f"CWD: {CWD}")
-    logger.info(f"Содержимое BASE_DIR: {list(BASE_DIR.iterdir())}")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"BASE_DIR: {BASE_DIR}")
+    logger.info(f"APP_DIR exists: {APP_DIR.exists()}")
+    if APP_DIR.exists():
+        logger.info(f"Содержимое app/: {list(APP_DIR.iterdir())}")
+    yield
 
-for base in [BASE_DIR, CWD]:
-    for folder in ["styles", "scripts"]:
-        p = base / folder
-        if p.exists() and not app.routes:
-            app.mount(f"/{folder}", StaticFiles(directory=str(p)), name=folder)
-            break
+app = FastAPI(lifespan=lifespan)
 
-for folder in ["styles", "scripts"]:
-    p = BASE_DIR / folder
-    if p.exists():
-        try:
-            app.mount(f"/{folder}", StaticFiles(directory=str(p)), name=folder)
-        except Exception as e:
-            logger.warning(f"Не удалось смонтировать {folder}: {e}")
+# Монтируем всю папку app/ как статику
+if APP_DIR.exists():
+    app.mount("/app", StaticFiles(directory=str(APP_DIR)), name="app")
+    logger.info("Смонтировано /app")
 
 @app.get("/")
 @app.get("/index.html")
 async def read_index():
     candidates = [
-        BASE_DIR / "pages" / "index.html",
+        APP_DIR / "index.html",
         BASE_DIR / "index.html",
-        CWD / "pages" / "index.html",
-        CWD / "index.html",
-        Path("/app/pages/index.html"),
-        Path("/app/index.html"),
+        Path("/app/index.html"),  # на случай если BASE_DIR == /app
     ]
     for path in candidates:
         logger.info(f"Проверяю: {path} — {'EXISTS' if path.exists() else 'not found'}")
         if path.exists():
             return FileResponse(str(path))
 
-    return {"error": "index.html not found", "base_dir": str(BASE_DIR), "cwd": str(CWD)}
+    return {
+        "error": "index.html not found",
+        "base_dir": str(BASE_DIR),
+        "app_dir": str(APP_DIR),
+        "app_dir_exists": APP_DIR.exists(),
+    }
 
 @app.get("/debug")
 async def debug():
     import subprocess
-    result = subprocess.run(["find", "/app", "-type", "f"], capture_output=True, text=True)
+    result = subprocess.run(["find", "/", "-name", "index.html", "-type", "f"], capture_output=True, text=True)
     return {
-        "files": result.stdout.splitlines(),
+        "index_html_locations": result.stdout.splitlines(),
         "base_dir": str(BASE_DIR),
-        "cwd": str(CWD),
+        "app_dir": str(APP_DIR),
+        "cwd": str(Path.cwd()),
     }
 
 async def on_startup(bot: Bot):
     gm = await bot.get_me()
-    print(f"Робот GMLY (@{gm.username}) успешно запущен!")
+    logger.info(f"Робот GMLY (@{gm.username}) успешно запущен!")
 
 async def main():
     dp.startup.register(on_startup)
